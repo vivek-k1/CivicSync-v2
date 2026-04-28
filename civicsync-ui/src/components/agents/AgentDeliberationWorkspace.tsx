@@ -91,6 +91,7 @@ function StructuredOverallAnswer({
     </>
   );
 }
+
 const READER_PERSONAS: { value: string; label: string }[] = [
   { value: "", label: "From your question only" },
   { value: "General User", label: "General user" },
@@ -354,7 +355,7 @@ export function AgentDeliberationWorkspace({
       {completedCount === totalAgents &&
         totalAgents > 0 &&
         isRunning &&
-        !overallAnswer && (
+        !overallPayload && (
           <div className="flex items-center gap-3 rounded-xl border border-dashed border-zinc-700/80 bg-zinc-900/40 px-4 py-4 text-xs text-zinc-400">
             <motion.div
               animate={{ rotate: 360 }}
@@ -370,33 +371,43 @@ export function AgentDeliberationWorkspace({
         )}
 
       {/* Persona-tailored overall answer — after agent cards */}
-      {overallAnswer && (
+      {overallPayload && (
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
           className="glass-panel-strong rounded-xl p-5 space-y-4 border border-emerald-500/15"
         >
-          <div className="flex items-start gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500/30 to-cyan-500/20 flex items-center justify-center shrink-0">
-              <Sparkles className="h-4 w-4 text-emerald-300" />
-            </div>
-            <div className="min-w-0 flex-1 space-y-1">
-              <h3 className="font-display text-sm font-semibold text-zinc-100">
-                Your answer
-              </h3>
-              <p className="text-[11px] text-zinc-500 leading-relaxed">
-                <span className="text-zinc-400">Question:</span>{" "}
-                <span className="text-zinc-300">{query.trim() || "—"}</span>
-                <span className="mx-1.5 text-zinc-600">·</span>
-                <span className="text-zinc-400">Reader:</span>{" "}
-                <span className="text-zinc-300">{personaLabel}</span>
-              </p>
-            </div>
-          </div>
-          <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap border-t border-zinc-800/80 pt-4">
-            {overallAnswer}
-          </div>
+          {overallPayload.structured ? (
+            <StructuredOverallAnswer
+              structured={overallPayload.structured}
+              queryLabel={query.trim() || "—"}
+              personaLabel={personaLabel}
+            />
+          ) : (
+            <>
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500/30 to-cyan-500/20 flex items-center justify-center shrink-0">
+                  <Sparkles className="h-4 w-4 text-emerald-300" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <h3 className="font-display text-sm font-semibold text-zinc-100">
+                    Your answer
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 leading-relaxed">
+                    <span className="text-zinc-400">Question:</span>{" "}
+                    <span className="text-zinc-300">{query.trim() || "—"}</span>
+                    <span className="mx-1.5 text-zinc-600">·</span>
+                    <span className="text-zinc-400">Reader:</span>{" "}
+                    <span className="text-zinc-300">{personaLabel}</span>
+                  </p>
+                </div>
+              </div>
+              <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap border-t border-zinc-800/80 pt-4">
+                {overallPayload.text ?? ""}
+              </div>
+            </>
+          )}
         </motion.div>
       )}
 
