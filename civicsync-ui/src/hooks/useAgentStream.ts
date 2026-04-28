@@ -4,6 +4,7 @@ import type {
   AgentResult,
   AgentId,
   SonnetSummary,
+  ReaderOverallPayload,
 } from "@/types/api";
 import { streamVerdictAgents } from "@/lib/api";
 
@@ -30,6 +31,7 @@ export function useAgentStream() {
   const [agents, setAgents] = useState<AgentStreamState[]>(createInitialState());
   const [isRunning, setIsRunning] = useState(false);
   const [summary, setSummary] = useState<SonnetSummary | null>(null);
+  const [overallPayload, setOverallPayload] = useState<ReaderOverallPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -42,6 +44,7 @@ export function useAgentStream() {
       setError(null);
       setIsRunning(true);
       setSummary(null);
+      setOverallPayload(null);
 
       const startTime = Date.now();
 
@@ -98,6 +101,10 @@ export function useAgentStream() {
             );
           },
 
+          onOverall: (payload) => {
+            setOverallPayload(payload);
+          },
+
           onDone: () => {
             if (timerRef.current) clearInterval(timerRef.current);
             setIsRunning(false);
@@ -132,8 +139,17 @@ export function useAgentStream() {
     setAgents(createInitialState());
     setIsRunning(false);
     setSummary(null);
+    setOverallPayload(null);
     setError(null);
   }, []);
 
-  return { agents, isRunning, summary, error, startDeliberation, reset };
+  return {
+    agents,
+    isRunning,
+    summary,
+    overallPayload,
+    error,
+    startDeliberation,
+    reset,
+  };
 }

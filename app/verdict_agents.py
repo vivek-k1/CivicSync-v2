@@ -227,6 +227,171 @@ def run_verdict_agents(
         yield result
 
 
+def _extract_json_object_from_text(text: str) -> dict | None:
+    """Parse a single JSON object from model output; tolerate markdown fences."""
+    if not text or not text.strip():
+        return None
+    import re
+
+    s = text.strip()
+    fence = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", s)
+    if fence:
+        s = fence.group(1).strip()
+    brace = re.search(r"\{[\s\S]+\}", s)
+    if brace:
+        s = brace.group(0)
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        return None
+
+
+def _validate_structured_overall(d: dict) -> bool:
+    if not isinstance(d, dict):
+        return False
+    if not isinstance(d.get("title"), str) or not str(d["title"]).strip():
+        return False
+    if not isinstance(d.get("takeaway"), str) or not str(d["takeaway"]).strip():
+        return False
+    secs = d.get("sections")
+    if not isinstance(secs, list) or len(secs) < 1:
+        return False
+    for s in secs:
+        if not isinstance(s, dict):
+            return False
+        if not str(s.get("title") or "").strip():
+            return False
+        body = s.get("body")
+        bullets = s.get("bullets")
+        if body is not None and not isinstance(body, str):
+            return False
+        if bullets is not None:
+            if not isinstance(bullets, list):
+                return False
+            bullets = [b for b in bullets if str(b).strip()]
+        if not (body and str(body).strip()) and not bullets:
+            return False
+    return True
+
+
+def _compact_agent_for_synthesis(agent: Dict) -> Dict:
+    """Drop token-heavy / internal fields; keep angles the synthesizer needs."""
+    skip = {"_usage", "agent_description"}
+    out: Dict = {}
+    for k, v in agent.items():
+        if k in skip:
+            continue
+        if isinstance(v, list) and len(v) > 4:
+            out[k] = v[:4]
+        else:
+            out[k] = v
+    return out
+
+
+def synthesize_reader_overall(
+    bill_name: str,
+    user_query: str,
+    reader_persona: str,
+    summary_json: dict,
+    agent_results: List[Dict],
+) -> dict:
+    """
+    Structured answer to the user's question (JSON), using the law summary and
+    all five expert angles. Tailored to reader_persona when non-empty.
+
+    Returns {"structured": {...}} on success, or {"text": "..."} on failure / legacy.
+    """
+    slim_summary = {
+        "tl_dr": summary_json.get("tl_dr", ""),
+        "purpose": (summary_json.get("purpose") or "")[:1200],
+        "key_provisions": [
+            (p.get("provision", "") or "")[:400]
+            for p in (summary_json.get("key_provisions") or [])[:5]
+        ],
+    }
+    compact_agents = [
+        _compact_agent_for_synthesis(a) for a in agent_results
+    ]
+    uq = (user_query or "").strip() or "(no specific question)"
+    rp = (reader_persona or "").strip()
+    persona_line = (
+        f"The reader identified as: {rp}."
+        if rp
+        else "No specific persona was selected — write for a general reader."
+    )
+
+    user_block = f"""BILL: {bill_name}
+
+USER QUESTION: {uq}
+
+{persona_line}
+
+LAW SNAPSHOT (from verified summary):
+{json.dumps(slim_summary, indent=2, ensure_ascii=False)}
+
+FIVE EXPERT PERSPECTIVES (JSON — use to see agreement, tension, and trade-offs):
+{json.dumps(compact_agents, indent=2, ensure_ascii=False)}
+
+Return ONE JSON object only (no markdown fences, no commentary) that matches the schema the system message describes."""
+
+    try:
+        response = _get_client().messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=2000,
+            temperature=0.2,
+            system="""You are a neutral civic education assistant for India. Output ONE JSON object only (valid UTF-8 JSON, no trailing commentary).
+
+Schema (all string values in plain text, no markdown # headings inside strings — use sentence case titles only):
+{
+  "title": "Short question-style title, max 90 characters",
+  "takeaway": "2-4 sentences that answer the user directly; if a persona is set, speak to that reader (e.g. student) in second person or clearly scoped terms.",
+  "sections": [
+    {
+      "title": "Section heading e.g. What the law says",
+      "body": "Optional paragraph. Omit or use empty string if using bullets only.",
+      "bullets": ["optional list", "each a short factual point"]
+    }
+  ],
+  "outlook": "Optional one short paragraph: uncertainty, what depends on rules/courts, or what to monitor. May be empty string if nothing to add."
+}
+
+Content rules:
+- Use EXACTLY 2–4 items in "sections". Each must have a non-empty "title".
+- For each section, provide meaningful content: either a non-empty "body" and/or a non-empty "bullets" array (at least one of them).
+- Weave expert agreement and tension across sections; do not invent section numbers or citations not implied by the materials.
+- No JSON inside string values. Escape quotes in strings as needed.
+
+Respond with the JSON object only.""",
+            messages=[{"role": "user", "content": user_block}],
+        )
+        text = (response.content[0].text or "").strip()
+        usage = {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+        tracker.log_call(
+            "claude-haiku-4-5-20251001", usage["input_tokens"], usage["output_tokens"]
+        )
+        parsed = _extract_json_object_from_text(text)
+        if parsed and _validate_structured_overall(parsed):
+            # normalise optional outlook
+            out = {k: v for k, v in parsed.items() if k in ("title", "takeaway", "sections", "outlook")}
+            if "outlook" not in out:
+                out["outlook"] = ""
+            return {"structured": out}
+        return {
+            "text": text
+            or "We could not parse a structured answer; see raw model output or use the expert cards above."
+        }
+    except Exception as e:
+        return {
+            "text": (
+                f"We could not generate a tailored overall answer ({str(e)[:200]}). "
+                "You can still use the expert cards and summary above."
+            )
+        }
+
+
 # ── Verdict colour helpers ─────────────────────────────────────────────────
 VERDICT_COLOURS = {
     # Economist

@@ -19,6 +19,29 @@ export interface PersonaImpact {
   applies?: boolean;
 }
 
+/** One section in the overall structured answer (after agent deliberation) */
+export interface OverallSection {
+  title: string;
+  body?: string;
+  bullets?: string[];
+}
+
+export interface OverallStructured {
+  title: string;
+  takeaway: string;
+  sections: OverallSection[];
+  /** Optional closing note on uncertainty or what to watch */
+  outlook?: string;
+}
+
+/** Final SSE payload after all five agents — tailored to question + persona */
+export interface ReaderOverallPayload {
+  /** When the model returns validated JSON */
+  structured?: OverallStructured;
+  /** Fallback plain text if JSON failed or legacy API */
+  text?: string;
+}
+
 export interface SonnetSummary {
   tl_dr: string;
   purpose: string;

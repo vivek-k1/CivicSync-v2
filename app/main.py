@@ -278,17 +278,28 @@ async def verdict_agents_stream(
     summary_json = sonnet_resp["summary"]
 
     def event_stream():
-        from app.verdict_agents import run_verdict_agents
+        from app.verdict_agents import run_verdict_agents, synthesize_reader_overall
 
         yield f"data: {json.dumps({'type': 'summary', 'data': summary_json})}\n\n"
 
+        agent_results: list = []
         for agent_result in run_verdict_agents(
             summary_json,
             bill_name,
             user_query=query,
             reader_persona=persona or "",
         ):
+            agent_results.append(agent_result)
             yield f"data: {json.dumps({'type': 'agent', 'data': agent_result})}\n\n"
+
+        overall_payload = synthesize_reader_overall(
+            bill_name=bill_name,
+            user_query=query,
+            reader_persona=persona or "",
+            summary_json=summary_json,
+            agent_results=agent_results,
+        )
+        yield f"data: {json.dumps({'type': 'overall', 'data': overall_payload})}\n\n"
 
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
@@ -368,7 +379,7 @@ def state_bills_search(
             "total": 0,
             "limit": limit,
             "offset": offset,
-            "message": "Dataset not found. Add data/bills_states.csv (see state_bills.py).",
+            "message": "Dataset not found. Add data/bills_states.csv next to the app, or set STATE_BILLS_CSV to its path (see state_bills.py).",
         }
 
     st = None
@@ -388,4 +399,5 @@ def state_bills_search(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    # Match civicsync-ui Vite proxy (vite.config.ts → 127.0.0.1:8005)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8005, reload=True)

@@ -1,13 +1,33 @@
 """
 State Bills browser — loads data/bills_states.csv and exposes filter helpers.
+
+Optional: set STATE_BILLS_CSV to an absolute path if the CSV lives outside the repo.
 """
 import csv
 import re
 import os
-from typing import List, Dict, Optional
-from functools import lru_cache
+from typing import List, Dict, Optional, Tuple
 
-CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "bills_states.csv")
+# Cached load: (resolved path, mtime) -> rows; avoids stale empty results from @lru_cache
+# when the CSV is added after the server starts, and allows relocating the file.
+_load_cache: Optional[Tuple[str, float, List[Dict]]] = None
+
+
+def _resolve_csv_path() -> Optional[str]:
+    """First existing path wins: env, package-relative data/, then cwd data/."""
+    env = os.environ.get("STATE_BILLS_CSV", "").strip()
+    if env and os.path.isfile(env):
+        return os.path.abspath(env)
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(here, "..", "data", "bills_states.csv"),
+        os.path.join(os.getcwd(), "data", "bills_states.csv"),
+    ]
+    for p in candidates:
+        ap = os.path.abspath(p)
+        if os.path.isfile(ap):
+            return ap
+    return None
 
 
 def _parse_year(date_str: str) -> Optional[int]:
@@ -20,20 +40,34 @@ def _parse_year(date_str: str) -> Optional[int]:
     return 1900 + yy if yy >= 61 else 2000 + yy
 
 
-@lru_cache(maxsize=1)
 def load_state_bills() -> List[Dict]:
     """Return all rows from bills_states.csv with a parsed `year` int field."""
-    if not os.path.isfile(CSV_PATH):
+    global _load_cache
+    path = _resolve_csv_path()
+    if not path:
+        _load_cache = None
         return []
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        _load_cache = None
+        return []
+    if _load_cache and _load_cache[0] == path and _load_cache[1] == mtime:
+        return _load_cache[2]
+
     rows = []
-    with open(CSV_PATH, encoding="utf-8-sig", newline="") as f:
+    with open(path, encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             if not row.get("state", "").strip():
                 continue
             row = dict(row)
             row["year"] = _parse_year(row.get("date", ""))
+            # Align with API/UI field name (CSV column is `house`)
+            if "legislature" not in row and row.get("house"):
+                row["legislature"] = row["house"]
             rows.append(row)
+    _load_cache = (path, mtime, rows)
     return rows
 
 

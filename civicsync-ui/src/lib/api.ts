@@ -3,6 +3,7 @@ import type {
   BillResponse,
   AgentResult,
   SonnetSummary,
+  ReaderOverallPayload,
 } from "@/types/api";
 
 const BASE = import.meta.env.VITE_API_URL
@@ -70,8 +71,8 @@ export function summarizeBill(params: {
 // ── Verdict Agents (SSE stream) ──────────────────────────────────────────
 
 export interface VerdictSSEEvent {
-  type: "summary" | "agent" | "done";
-  data?: SonnetSummary | AgentResult;
+  type: "summary" | "agent" | "overall" | "done";
+  data?: SonnetSummary | AgentResult | ReaderOverallPayload;
 }
 
 export function streamVerdictAgents(
@@ -79,6 +80,7 @@ export function streamVerdictAgents(
   callbacks: {
     onSummary: (summary: SonnetSummary) => void;
     onAgent: (result: AgentResult) => void;
+    onOverall?: (payload: ReaderOverallPayload) => void;
     onDone: () => void;
     onError: (err: Error) => void;
   }
@@ -127,6 +129,8 @@ export function streamVerdictAgents(
               callbacks.onSummary(event.data as SonnetSummary);
             } else if (event.type === "agent") {
               callbacks.onAgent(event.data as AgentResult);
+            } else if (event.type === "overall") {
+              callbacks.onOverall?.(event.data as ReaderOverallPayload);
             } else if (event.type === "done") {
               callbacks.onDone();
             }

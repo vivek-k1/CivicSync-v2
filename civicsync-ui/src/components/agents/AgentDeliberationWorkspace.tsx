@@ -6,14 +6,91 @@ import {
   Zap,
   AlertCircle,
   Search,
+  Sparkles,
 } from "lucide-react";
 import { AgentThinkingCard } from "./AgentThinkingCard";
 import { BillUploadZone } from "./BillUploadZone";
 import { useAgentStream } from "@/hooks/useAgentStream";
 import { fetchBills } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { BillInfo } from "@/types/api";
+import type { BillInfo, OverallStructured } from "@/types/api";
 
+function StructuredOverallAnswer({
+  structured,
+  queryLabel,
+  personaLabel,
+}: {
+  structured: OverallStructured;
+  queryLabel: string;
+  personaLabel: string;
+}) {
+  const outlook = structured.outlook?.trim();
+
+  return (
+    <>
+      <div className="flex items-start gap-3">
+        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500/30 to-cyan-500/20 flex items-center justify-center shrink-0">
+          <Sparkles className="h-4 w-4 text-emerald-300" />
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <h3 className="font-display text-sm font-semibold text-zinc-100">
+            Your answer
+          </h3>
+          <p className="text-[11px] text-zinc-500 leading-relaxed">
+            <span className="text-zinc-400">Question:</span>{" "}
+            <span className="text-zinc-300">{queryLabel || "—"}</span>
+            <span className="mx-1.5 text-zinc-600">·</span>
+            <span className="text-zinc-400">Reader:</span>{" "}
+            <span className="text-zinc-300">{personaLabel}</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="border-t border-zinc-800/80 pt-4 space-y-5">
+        <h4 className="font-display text-base font-bold text-zinc-100 leading-snug tracking-tight">
+          {structured.title}
+        </h4>
+
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/90 mb-1.5">
+            Direct answer
+          </p>
+          <p className="text-sm text-zinc-200 leading-relaxed">{structured.takeaway}</p>
+        </div>
+
+        {structured.sections.map((sec, i) => (
+          <section key={i} className="space-y-2">
+            <h5 className="text-xs font-semibold text-zinc-300 uppercase tracking-wide">
+              {sec.title}
+            </h5>
+            {sec.body?.trim() ? (
+              <p className="text-sm text-zinc-300 leading-relaxed">{sec.body.trim()}</p>
+            ) : null}
+            {sec.bullets && sec.bullets.length > 0 ? (
+              <ul className="list-disc pl-5 space-y-1.5 text-sm text-zinc-300 leading-relaxed marker:text-zinc-600">
+                {sec.bullets
+                  .map((b) => String(b).trim())
+                  .filter(Boolean)
+                  .map((line, j) => (
+                    <li key={j}>{line}</li>
+                  ))}
+              </ul>
+            ) : null}
+          </section>
+        ))}
+
+        {outlook ? (
+          <div className="rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
+              What to keep in mind
+            </p>
+            <p className="text-xs text-zinc-400 leading-relaxed">{outlook}</p>
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
+}
 const READER_PERSONAS: { value: string; label: string }[] = [
   { value: "", label: "From your question only" },
   { value: "General User", label: "General user" },
@@ -33,7 +110,7 @@ export function AgentDeliberationWorkspace({
   className,
   onSummaryReady,
 }: AgentDeliberationWorkspaceProps) {
-  const { agents, isRunning, summary, error, startDeliberation, reset } =
+  const { agents, isRunning, summary, overallPayload, error, startDeliberation, reset } =
     useAgentStream();
 
   const [bills, setBills] = useState<Record<string, BillInfo>>({});
@@ -81,6 +158,9 @@ export function AgentDeliberationWorkspace({
 
   const completedCount = agents.filter((a) => a.status === "complete").length;
   const totalAgents = agents.length;
+  const personaLabel =
+    READER_PERSONAS.find((o) => o.value === readerPersona)?.label ??
+    (readerPersona.trim() || "From your question only");
 
   const handleStart = () => {
     if (!selectedBill || !query.trim()) return;
@@ -270,35 +350,85 @@ export function AgentDeliberationWorkspace({
         </div>
       )}
 
-      {/* Consensus Summary */}
-      {completedCount === totalAgents && completedCount > 0 && !isRunning && (
+      {/* Synthesis wait — all agents done, final answer still generating */}
+      {completedCount === totalAgents &&
+        totalAgents > 0 &&
+        isRunning &&
+        !overallAnswer && (
+          <div className="flex items-center gap-3 rounded-xl border border-dashed border-zinc-700/80 bg-zinc-900/40 px-4 py-4 text-xs text-zinc-400">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            >
+              <Sparkles className="h-4 w-4 text-amber-400/90" />
+            </motion.div>
+            <p>
+              Composing your overall answer from all five perspectives (this may
+              take a few seconds)…
+            </p>
+          </div>
+        )}
+
+      {/* Persona-tailored overall answer — after agent cards */}
+      {overallAnswer && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="glass-panel-strong rounded-xl p-5 space-y-4 border border-emerald-500/15"
+        >
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500/30 to-cyan-500/20 flex items-center justify-center shrink-0">
+              <Sparkles className="h-4 w-4 text-emerald-300" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <h3 className="font-display text-sm font-semibold text-zinc-100">
+                Your answer
+              </h3>
+              <p className="text-[11px] text-zinc-500 leading-relaxed">
+                <span className="text-zinc-400">Question:</span>{" "}
+                <span className="text-zinc-300">{query.trim() || "—"}</span>
+                <span className="mx-1.5 text-zinc-600">·</span>
+                <span className="text-zinc-400">Reader:</span>{" "}
+                <span className="text-zinc-300">{personaLabel}</span>
+              </p>
+            </div>
+          </div>
+          <div className="text-sm text-zinc-200 leading-relaxed whitespace-pre-wrap border-t border-zinc-800/80 pt-4">
+            {overallAnswer}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Compact snapshot + expert verdict tags after a full run */}
+      {completedCount === totalAgents && completedCount > 0 && !isRunning && summary && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="glass-panel-strong rounded-xl p-5 space-y-3"
+          transition={{ delay: 0.15 }}
+          className="glass-panel rounded-xl p-5 space-y-3"
         >
           <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
+            <div className="h-6 w-6 rounded-full bg-gradient-to-br from-blue-500/80 to-purple-500/50 flex items-center justify-center">
               <span className="text-xs">🎯</span>
             </div>
             <h3 className="font-display text-sm font-semibold text-zinc-100">
-              Lead Coordinator — Consensus Synthesis
+              Bill snapshot
             </h3>
           </div>
 
-          {summary && (
-            <div className="space-y-2">
-              <p className="text-sm text-zinc-200 font-medium leading-relaxed">
-                {summary.tl_dr}
-              </p>
-              <p className="text-xs text-zinc-400 leading-relaxed">
+          <div className="space-y-2">
+            <p className="text-sm text-zinc-200 font-medium leading-relaxed">
+              {summary.tl_dr}
+            </p>
+            {summary.purpose && (
+              <p className="text-xs text-zinc-500 leading-relaxed">
                 {summary.purpose}
               </p>
-            </div>
-          )}
+            )}
+          </div>
 
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap pt-1">
             {agents
               .filter((a) => a.result)
               .map((a) => (
