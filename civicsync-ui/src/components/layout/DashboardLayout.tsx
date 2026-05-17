@@ -97,7 +97,8 @@ export function DashboardLayout({
           <div className="h-9 w-9 flex items-center justify-center overflow-hidden rounded-xl bg-zinc-900 shadow-lg border border-zinc-800">
             <img src="/civicsync_icon.png" alt="CivicSync Logo" className="h-full w-full object-cover" />
           </div>
-
+        </div>
+        
         {/* Nav Items */}
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
