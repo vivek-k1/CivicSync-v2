@@ -94,13 +94,9 @@ export function DashboardLayout({
       <nav className="w-16 flex-shrink-0 glass-panel-strong border-r border-zinc-800/50 flex flex-col items-center py-4 gap-1 z-20">
         {/* Logo */}
         <div className="mb-4 flex flex-col items-center gap-1">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <Activity className="h-4.5 w-4.5 text-white" />
+          <div className="h-9 w-9 flex items-center justify-center overflow-hidden rounded-xl bg-zinc-900 shadow-lg border border-zinc-800">
+            <img src="/civicsync_icon.png" alt="CivicSync Logo" className="h-full w-full object-cover" />
           </div>
-          <span className="text-[8px] font-display font-bold text-zinc-500 uppercase tracking-widest">
-            Civic
-          </span>
-        </div>
 
         {/* Nav Items */}
         {NAV_ITEMS.map((item) => {
